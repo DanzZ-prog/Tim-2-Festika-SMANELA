@@ -1,0 +1,964 @@
+<!doctype html>
+<html lang="id">
+ <head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sistem Izin Siswa</title>
+  <script src="/_sdk/data_sdk.js"></script>
+  <script src="/_sdk/element_sdk.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+        body {
+            box-sizing: border-box;
+        }
+        
+        .gradient-bg {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        
+        .card-shadow {
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+        }
+        
+        .status-pending {
+            background-color: #fef3c7;
+            color: #92400e;
+        }
+        
+        .status-approved {
+            background-color: #d1fae5;
+            color: #065f46;
+        }
+        
+        .status-rejected {
+            background-color: #fee2e2;
+            color: #991b1b;
+        }
+        
+        .fade-in {
+            animation: fadeIn 0.3s ease-in;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        .btn-primary {
+            transition: all 0.3s ease;
+        }
+        
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(102, 126, 234, 0.4);
+        }
+    </style>
+  <style>@view-transition { navigation: auto; }</style>
+ </head>
+ <body class="min-h-full" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
+  <div id="app" class="min-h-full py-8 px-4"></div>
+  <script>
+        const defaultConfig = {
+            app_title: "Sistem Izin Siswa",
+            school_name: "SMA NEGERI 1 LAWANG",
+            email_domain: "smanegeri1lawang@gmail.com",
+            school_address: "Jalan Pramuka Nomor 152, Desa Kalirejo, Kecamatan Lawang, Kabupaten Malang, Jawa Timur",
+            school_phone: "+62341426265",
+            primary_color: "#667eea",
+            secondary_color: "#ffffff",
+            text_color: "#1f2937",
+            accent_color: "#764ba2",
+            success_color: "#10b981",
+            font_family: "Inter",
+            font_size: 16
+        };
+        
+        let currentUser = null;
+        let allPermissions = [];
+        
+        const dataHandler = {
+            onDataChanged(data) {
+                allPermissions = data.sort((a, b) => b.timestamp - a.timestamp);
+                renderCurrentView();
+            }
+        };
+        
+        async function initApp() {
+            const initResult = await window.dataSdk.init(dataHandler);
+            if (!initResult.isOk) {
+                console.error("Failed to initialize data SDK");
+                return;
+            }
+            
+            await window.elementSdk.init({
+                defaultConfig,
+                onConfigChange: async (config) => {
+                    document.documentElement.style.setProperty('--primary-color', config.primary_color || defaultConfig.primary_color);
+                    document.documentElement.style.setProperty('--secondary-color', config.secondary_color || defaultConfig.secondary_color);
+                    document.documentElement.style.setProperty('--text-color', config.text_color || defaultConfig.text_color);
+                    document.documentElement.style.setProperty('--accent-color', config.accent_color || defaultConfig.accent_color);
+                    
+                    const baseSize = config.font_size || defaultConfig.font_size;
+                    document.documentElement.style.fontSize = `${baseSize}px`;
+                    
+                    const customFont = config.font_family || defaultConfig.font_family;
+                    document.body.style.fontFamily = `${customFont}, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif`;
+                    
+                    renderCurrentView();
+                },
+                mapToCapabilities: (config) => ({
+                    recolorables: [
+                        {
+                            get: () => config.primary_color || defaultConfig.primary_color,
+                            set: (value) => {
+                                config.primary_color = value;
+                                window.elementSdk.setConfig({ primary_color: value });
+                            }
+                        },
+                        {
+                            get: () => config.secondary_color || defaultConfig.secondary_color,
+                            set: (value) => {
+                                config.secondary_color = value;
+                                window.elementSdk.setConfig({ secondary_color: value });
+                            }
+                        },
+                        {
+                            get: () => config.text_color || defaultConfig.text_color,
+                            set: (value) => {
+                                config.text_color = value;
+                                window.elementSdk.setConfig({ text_color: value });
+                            }
+                        },
+                        {
+                            get: () => config.accent_color || defaultConfig.accent_color,
+                            set: (value) => {
+                                config.accent_color = value;
+                                window.elementSdk.setConfig({ accent_color: value });
+                            }
+                        },
+                        {
+                            get: () => config.success_color || defaultConfig.success_color,
+                            set: (value) => {
+                                config.success_color = value;
+                                window.elementSdk.setConfig({ success_color: value });
+                            }
+                        }
+                    ],
+                    borderables: [],
+                    fontEditable: {
+                        get: () => config.font_family || defaultConfig.font_family,
+                        set: (value) => {
+                            config.font_family = value;
+                            window.elementSdk.setConfig({ font_family: value });
+                        }
+                    },
+                    fontSizeable: {
+                        get: () => config.font_size || defaultConfig.font_size,
+                        set: (value) => {
+                            config.font_size = value;
+                            window.elementSdk.setConfig({ font_size: value });
+                        }
+                    }
+                }),
+                mapToEditPanelValues: (config) => new Map([
+                    ["app_title", config.app_title || defaultConfig.app_title],
+                    ["school_name", config.school_name || defaultConfig.school_name],
+                    ["email_domain", config.email_domain || defaultConfig.email_domain]
+                ])
+            });
+            
+            renderLoginPage();
+        }
+        
+        function renderCurrentView() {
+            if (!currentUser) {
+                renderLoginPage();
+            } else if (currentUser.role === 'siswa') {
+                renderStudentDashboard();
+            } else if (currentUser.role === 'tatib') {
+                renderTatibDashboard();
+            } else if (currentUser.role === 'wakasek') {
+                renderWakasekDashboard();
+            }
+        }
+        
+        function renderLoginPage() {
+            const config = window.elementSdk?.config || defaultConfig;
+            const app = document.getElementById('app');
+            app.innerHTML = `
+                <div class="max-w-6xl mx-auto fade-in">
+                    <div class="text-center mb-8">
+                        <h1 class="text-4xl font-bold mb-2" style="color: ${config.secondary_color || defaultConfig.secondary_color}; font-size: ${(config.font_size || defaultConfig.font_size) * 2.5}px;">${config.app_title || defaultConfig.app_title}</h1>
+                        <p class="text-xl" style="color: ${config.secondary_color || defaultConfig.secondary_color}; opacity: 0.9; font-size: ${(config.font_size || defaultConfig.font_size) * 1.25}px;">${config.school_name || defaultConfig.school_name}</p>
+                    </div>
+                    
+                    <div class="grid md:grid-cols-3 gap-6 mb-8">
+                        <div class="card-shadow rounded-2xl p-8 cursor-pointer hover:scale-105 transition-transform" style="background-color: ${config.secondary_color || defaultConfig.secondary_color};" onclick="showLoginForm('siswa')">
+                            <div class="text-center">
+                                <div class="text-6xl mb-4">👨‍🎓</div>
+                                <h3 class="text-2xl font-bold mb-2" style="color: ${config.text_color || defaultConfig.text_color}; font-size: ${(config.font_size || defaultConfig.font_size) * 1.5}px;">Siswa</h3>
+                                <p style="color: ${config.text_color || defaultConfig.text_color}; opacity: 0.7; font-size: ${(config.font_size || defaultConfig.font_size)}px;">Ajukan izin kehadiran</p>
+                            </div>
+                        </div>
+                        
+                        <div class="card-shadow rounded-2xl p-8 cursor-pointer hover:scale-105 transition-transform" style="background-color: ${config.secondary_color || defaultConfig.secondary_color};" onclick="showLoginForm('tatib')">
+                            <div class="text-center">
+                                <div class="text-6xl mb-4">👨‍🏫</div>
+                                <h3 class="text-2xl font-bold mb-2" style="color: ${config.text_color || defaultConfig.text_color}; font-size: ${(config.font_size || defaultConfig.font_size) * 1.5}px;">Guru Tata Tertib</h3>
+                                <p style="color: ${config.text_color || defaultConfig.text_color}; opacity: 0.7; font-size: ${(config.font_size || defaultConfig.font_size)}px;">Verifikasi izin siswa</p>
+                            </div>
+                        </div>
+                        
+                        <div class="card-shadow rounded-2xl p-8 cursor-pointer hover:scale-105 transition-transform" style="background-color: ${config.secondary_color || defaultConfig.secondary_color};" onclick="showLoginForm('wakasek')">
+                            <div class="text-center">
+                                <div class="text-6xl mb-4">👔</div>
+                                <h3 class="text-2xl font-bold mb-2" style="color: ${config.text_color || defaultConfig.text_color}; font-size: ${(config.font_size || defaultConfig.font_size) * 1.5}px;">Wakil Kepala Sekolah</h3>
+                                <p style="color: ${config.text_color || defaultConfig.text_color}; opacity: 0.7; font-size: ${(config.font_size || defaultConfig.font_size)}px;">Persetujuan akhir</p>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div id="loginFormContainer"></div>
+                    
+                    <div class="card-shadow rounded-2xl p-8 mt-8" style="background-color: ${config.secondary_color || defaultConfig.secondary_color};">
+                        <h2 class="text-2xl font-bold mb-6" style="color: ${config.text_color || defaultConfig.text_color}; font-size: ${(config.font_size || defaultConfig.font_size) * 1.5}px;">📋 Riwayat Izin Siswa</h2>
+                        <div id="publicHistory"></div>
+                    </div>
+                </div>
+            `;
+            
+            renderPublicHistory();
+        }
+        
+        function showLoginForm(role) {
+            const config = window.elementSdk?.config || defaultConfig;
+            const container = document.getElementById('loginFormContainer');
+            const roleNames = {
+                'siswa': 'Siswa',
+                'tatib': 'Guru Tata Tertib',
+                'wakasek': 'Wakil Kepala Sekolah'
+            };
+            
+            container.innerHTML = `
+                <div class="card-shadow rounded-2xl p-8 max-w-md mx-auto fade-in" style="background-color: ${config.secondary_color || defaultConfig.secondary_color};">
+                    <h3 class="text-2xl font-bold mb-6 text-center" style="color: ${config.text_color || defaultConfig.text_color}; font-size: ${(config.font_size || defaultConfig.font_size) * 1.5}px;">Login sebagai ${roleNames[role]}</h3>
+                    <form id="loginForm-${role}">
+                        ${role === 'siswa' ? `
+                            <div class="mb-4">
+                                <label class="block mb-2 font-semibold" style="color: ${config.text_color || defaultConfig.text_color}; font-size: ${(config.font_size || defaultConfig.font_size)}px;" for="nama">Nama Lengkap</label>
+                                <input type="text" id="nama" required class="w-full px-4 py-3 rounded-lg border-2 focus:outline-none focus:border-purple-500" style="font-size: ${(config.font_size || defaultConfig.font_size)}px;">
+                            </div>
+                            <div class="mb-4">
+                                <label class="block mb-2 font-semibold" style="color: ${config.text_color || defaultConfig.text_color}; font-size: ${(config.font_size || defaultConfig.font_size)}px;" for="kelas">Kelas</label>
+                                <select id="kelas" required class="w-full px-4 py-3 rounded-lg border-2 focus:outline-none focus:border-purple-500" style="font-size: ${(config.font_size || defaultConfig.font_size)}px;">
+                                    <option value="">Pilih Kelas</option>
+                                    <optgroup label="Kelas X">
+                                        <option value="X-1">X-1</option>
+                                        <option value="X-2">X-2</option>
+                                        <option value="X-3">X-3</option>
+                                        <option value="X-4">X-4</option>
+                                        <option value="X-5">X-5</option>
+                                        <option value="X-6">X-6</option>
+                                        <option value="X-7">X-7</option>
+                                        <option value="X-8">X-8</option>
+                                        <option value="X-9">X-9</option>
+                                        <option value="X-10">X-10</option>
+                                        <option value="X-11">X-11</option>
+                                        <option value="X-12">X-12</option>
+                                    </optgroup>
+                                    <optgroup label="Kelas XI">
+                                        <option value="XI-1">XI-1</option>
+                                        <option value="XI-2">XI-2</option>
+                                        <option value="XI-3">XI-3</option>
+                                        <option value="XI-4">XI-4</option>
+                                        <option value="XI-5">XI-5</option>
+                                        <option value="XI-6">XI-6</option>
+                                        <option value="XI-7">XI-7</option>
+                                        <option value="XI-8">XI-8</option>
+                                        <option value="XI-9">XI-9</option>
+                                        <option value="XI-10">XI-10</option>
+                                        <option value="XI-11">XI-11</option>
+                                        <option value="XI-12">XI-12</option>
+                                    </optgroup>
+                                    <optgroup label="Kelas XII">
+                                        <option value="XII-1">XII-1</option>
+                                        <option value="XII-2">XII-2</option>
+                                        <option value="XII-3">XII-3</option>
+                                        <option value="XII-4">XII-4</option>
+                                        <option value="XII-5">XII-5</option>
+                                        <option value="XII-6">XII-6</option>
+                                        <option value="XII-7">XII-7</option>
+                                        <option value="XII-8">XII-8</option>
+                                        <option value="XII-9">XII-9</option>
+                                        <option value="XII-10">XII-10</option>
+                                        <option value="XII-11">XII-11</option>
+                                        <option value="XII-12">XII-12</option>
+                                    </optgroup>
+                                </select>
+                            </div>
+                            <div class="mb-6">
+                                <label class="block mb-2 font-semibold" style="color: ${config.text_color || defaultConfig.text_color}; font-size: ${(config.font_size || defaultConfig.font_size)}px;" for="password">Kata Sandi</label>
+                                <input type="password" id="password" required class="w-full px-4 py-3 rounded-lg border-2 focus:outline-none focus:border-purple-500" style="font-size: ${(config.font_size || defaultConfig.font_size)}px;">
+                            </div>
+                        ` : `
+                            <div class="mb-4">
+                                <label class="block mb-2 font-semibold" style="color: ${config.text_color || defaultConfig.text_color}; font-size: ${(config.font_size || defaultConfig.font_size)}px;" for="nama">Nama Lengkap</label>
+                                <input type="text" id="nama" required placeholder="Masukkan nama lengkap" class="w-full px-4 py-3 rounded-lg border-2 focus:outline-none focus:border-purple-500" style="font-size: ${(config.font_size || defaultConfig.font_size)}px;">
+                            </div>
+                            <div class="mb-4">
+                                <label class="block mb-2 font-semibold" style="color: ${config.text_color || defaultConfig.text_color}; font-size: ${(config.font_size || defaultConfig.font_size)}px;" for="email">Email Sekolah</label>
+                                <input type="email" id="email" required placeholder="Masukkan email sekolah" class="w-full px-4 py-3 rounded-lg border-2 focus:outline-none focus:border-purple-500" style="font-size: ${(config.font_size || defaultConfig.font_size)}px;">
+                            </div>
+                            <div class="mb-6">
+                                <label class="block mb-2 font-semibold" style="color: ${config.text_color || defaultConfig.text_color}; font-size: ${(config.font_size || defaultConfig.font_size)}px;" for="password">Kata Sandi</label>
+                                <input type="password" id="password" required class="w-full px-4 py-3 rounded-lg border-2 focus:outline-none focus:border-purple-500" style="font-size: ${(config.font_size || defaultConfig.font_size)}px;">
+                            </div>
+                        `}
+                        <button type="submit" class="w-full py-3 rounded-lg font-bold btn-primary" style="background-color: ${config.primary_color || defaultConfig.primary_color}; color: ${config.secondary_color || defaultConfig.secondary_color}; font-size: ${(config.font_size || defaultConfig.font_size) * 1.125}px;">Masuk</button>
+                        <button type="button" onclick="renderLoginPage()" class="w-full mt-3 py-3 rounded-lg font-bold" style="background-color: transparent; border: 2px solid ${config.primary_color || defaultConfig.primary_color}; color: ${config.primary_color || defaultConfig.primary_color}; font-size: ${(config.font_size || defaultConfig.font_size) * 1.125}px;">Kembali</button>
+                    </form>
+                </div>
+            `;
+            
+            document.getElementById(`loginForm-${role}`).addEventListener('submit', function(event) {
+                event.preventDefault();
+                handleLogin(event, role);
+            });
+        }
+        
+        const studentPasswords = {
+            'fajar udin': '2112',
+            'jiambu siti': '2212',
+            'arif setya': '24456',
+            'budi lipogan': '25567',
+            'moch valensyach': '27789',
+            'moch algathan': '28890',
+            'joe ananta': '29970',
+            'hiwakcca shin': '24455'
+        };
+        
+        const teacherAccounts = {
+            'tatib': {
+                'melani siregar': 'smanela.com'
+            },
+            'wakasek': {
+                'ferdy handoko': 'smanela.com'
+            }
+        };
+        
+        function handleLogin(event, role) {
+            event.preventDefault();
+            const config = window.elementSdk?.config || defaultConfig;
+            
+            if (role === 'siswa') {
+                const nama = document.getElementById('nama').value.toLowerCase().trim();
+                const kelas = document.getElementById('kelas').value;
+                const password = document.getElementById('password').value;
+                
+                if (!studentPasswords[nama]) {
+                    showToast('Nama siswa tidak terdaftar', 'error');
+                    return;
+                }
+                
+                if (studentPasswords[nama] !== password) {
+                    showToast('Kata sandi salah', 'error');
+                    return;
+                }
+                
+                const namaDisplay = nama.split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
+                currentUser = { role: 'siswa', nama: namaDisplay, kelas };
+                renderStudentDashboard();
+            } else {
+                const nama = document.getElementById('nama').value.toLowerCase().trim();
+                const email = document.getElementById('email').value;
+                const password = document.getElementById('password').value;
+                const requiredEmail = config.email_domain || defaultConfig.email_domain;
+                
+                if (!teacherAccounts[role][nama]) {
+                    showToast('Nama tidak terdaftar', 'error');
+                    return;
+                }
+                
+                if (email !== requiredEmail) {
+                    showToast('Email sekolah salah', 'error');
+                    return;
+                }
+                
+                if (password !== teacherAccounts[role][nama]) {
+                    showToast('Kata sandi salah', 'error');
+                    return;
+                }
+                
+                const namaDisplay = nama.split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
+                currentUser = { role, nama: namaDisplay, email };
+                if (role === 'tatib') {
+                    renderTatibDashboard();
+                } else {
+                    renderWakasekDashboard();
+                }
+            }
+        }
+        
+        function renderStudentDashboard() {
+            const config = window.elementSdk?.config || defaultConfig;
+            const app = document.getElementById('app');
+            const myPermissions = allPermissions.filter(p => p.nama_siswa === currentUser.nama && p.kelas === currentUser.kelas);
+            
+            app.innerHTML = `
+                <div class="max-w-6xl mx-auto fade-in">
+                    <div class="flex justify-between items-center mb-8">
+                        <div>
+                            <h1 class="text-3xl font-bold" style="color: ${config.secondary_color || defaultConfig.secondary_color}; font-size: ${(config.font_size || defaultConfig.font_size) * 2}px;">Dashboard Siswa</h1>
+                            <p class="mt-2" style="color: ${config.secondary_color || defaultConfig.secondary_color}; opacity: 0.9; font-size: ${(config.font_size || defaultConfig.font_size) * 1.125}px;">${currentUser.nama} - ${currentUser.kelas}</p>
+                        </div>
+                        <button onclick="logout()" class="px-6 py-3 rounded-lg font-bold" style="background-color: ${config.secondary_color || defaultConfig.secondary_color}; color: ${config.primary_color || defaultConfig.primary_color}; font-size: ${(config.font_size || defaultConfig.font_size)}px;">Keluar</button>
+                    </div>
+                    
+                    <div class="grid md:grid-cols-2 gap-6">
+                        <div class="card-shadow rounded-2xl p-8" style="background-color: ${config.secondary_color || defaultConfig.secondary_color};">
+                            <h2 class="text-2xl font-bold mb-6" style="color: ${config.text_color || defaultConfig.text_color}; font-size: ${(config.font_size || defaultConfig.font_size) * 1.5}px;">📝 Ajukan Izin Baru</h2>
+                            <form id="permissionForm">
+                                <div class="mb-4">
+                                    <label class="block mb-2 font-semibold" style="color: ${config.text_color || defaultConfig.text_color}; font-size: ${(config.font_size || defaultConfig.font_size)}px;" for="alasan">Alasan Izin</label>
+                                    <textarea id="alasan" required rows="3" class="w-full px-4 py-3 rounded-lg border-2 focus:outline-none focus:border-purple-500" placeholder="Jelaskan alasan izin Anda..." style="font-size: ${(config.font_size || defaultConfig.font_size)}px;"></textarea>
+                                </div>
+                                <div class="mb-4">
+                                    <label class="block mb-2 font-semibold" style="color: ${config.text_color || defaultConfig.text_color}; font-size: ${(config.font_size || defaultConfig.font_size)}px;" for="tanggal">Tanggal</label>
+                                    <input type="date" id="tanggal" required class="w-full px-4 py-3 rounded-lg border-2 focus:outline-none focus:border-purple-500" style="font-size: ${(config.font_size || defaultConfig.font_size)}px;">
+                                </div>
+                                <div class="grid grid-cols-2 gap-4 mb-6">
+                                    <div>
+                                        <label class="block mb-2 font-semibold" style="color: ${config.text_color || defaultConfig.text_color}; font-size: ${(config.font_size || defaultConfig.font_size)}px;" for="jamMulai">Jam Mulai</label>
+                                        <input type="time" id="jamMulai" required class="w-full px-4 py-3 rounded-lg border-2 focus:outline-none focus:border-purple-500" style="font-size: ${(config.font_size || defaultConfig.font_size)}px;">
+                                    </div>
+                                    <div>
+                                        <label class="block mb-2 font-semibold" style="color: ${config.text_color || defaultConfig.text_color}; font-size: ${(config.font_size || defaultConfig.font_size)}px;" for="jamSelesai">Jam Selesai</label>
+                                        <input type="time" id="jamSelesai" required class="w-full px-4 py-3 rounded-lg border-2 focus:outline-none focus:border-purple-500" style="font-size: ${(config.font_size || defaultConfig.font_size)}px;">
+                                    </div>
+                                </div>
+                                <button type="submit" id="submitBtn" class="w-full py-3 rounded-lg font-bold btn-primary" style="background-color: ${config.primary_color || defaultConfig.primary_color}; color: ${config.secondary_color || defaultConfig.secondary_color}; font-size: ${(config.font_size || defaultConfig.font_size) * 1.125}px;">Kirim Pengajuan</button>
+                            </form>
+                        </div>
+                        
+                        <div class="card-shadow rounded-2xl p-8" style="background-color: ${config.secondary_color || defaultConfig.secondary_color};">
+                            <h2 class="text-2xl font-bold mb-6" style="color: ${config.text_color || defaultConfig.text_color}; font-size: ${(config.font_size || defaultConfig.font_size) * 1.5}px;">📋 Riwayat Izin Saya</h2>
+                            <div id="myPermissions" class="space-y-4 max-h-96 overflow-y-auto"></div>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            document.getElementById('permissionForm').addEventListener('submit', submitPermission);
+            renderMyPermissions(myPermissions);
+        }
+        
+        async function submitPermission(event) {
+            event.preventDefault();
+            
+            if (allPermissions.length >= 999) {
+                showToast('Batas maksimum 999 izin telah tercapai. Silakan hapus beberapa izin terlebih dahulu.', 'error');
+                return;
+            }
+            
+            const submitBtn = document.getElementById('submitBtn');
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Mengirim...';
+            
+            const alasan = document.getElementById('alasan').value;
+            const tanggal = document.getElementById('tanggal').value;
+            const jamMulai = document.getElementById('jamMulai').value;
+            const jamSelesai = document.getElementById('jamSelesai').value;
+            
+            const newPermission = {
+                id: Date.now().toString(),
+                nama_siswa: currentUser.nama,
+                kelas: currentUser.kelas,
+                alasan_izin: alasan,
+                tanggal_izin: tanggal,
+                jam_mulai: jamMulai,
+                jam_selesai: jamSelesai,
+                status_tatib: "Menunggu",
+                status_wakasek: "Menunggu",
+                catatan_tatib: "",
+                catatan_wakasek: "",
+                timestamp: Date.now()
+            };
+            
+            const result = await window.dataSdk.create(newPermission);
+            
+            if (result.isOk) {
+                showToast('Pengajuan izin berhasil dikirim!', 'success');
+                document.getElementById('permissionForm').reset();
+            } else {
+                showToast('Gagal mengirim pengajuan. Silakan coba lagi.', 'error');
+            }
+            
+            submitBtn.disabled = false;
+            submitBtn.textContent = 'Kirim Pengajuan';
+        }
+        
+        function renderMyPermissions(permissions) {
+            const config = window.elementSdk?.config || defaultConfig;
+            const container = document.getElementById('myPermissions');
+            
+            if (permissions.length === 0) {
+                container.innerHTML = `<p style="color: ${config.text_color || defaultConfig.text_color}; opacity: 0.6; text-align: center; font-size: ${(config.font_size || defaultConfig.font_size)}px;">Belum ada riwayat izin</p>`;
+                return;
+            }
+            
+            container.innerHTML = permissions.map(p => {
+                const isFullyApproved = p.status_tatib === 'Disetujui' && p.status_wakasek === 'Disetujui';
+                const isRejected = p.status_tatib === 'Ditolak' || p.status_wakasek === 'Ditolak';
+                
+                return `
+                <div class="border-2 rounded-lg p-4" style="border-color: ${config.primary_color || defaultConfig.primary_color}; background-color: #e0e7ff;">
+                    <div class="flex justify-between items-start mb-2">
+                        <div class="font-bold" style="color: ${config.text_color || defaultConfig.text_color}; font-size: ${(config.font_size || defaultConfig.font_size) * 1.125}px;">${p.tanggal_izin}</div>
+                        <div class="flex gap-2">
+                            <span class="px-3 py-1 rounded-full text-xs font-bold ${getStatusClass(p.status_tatib)}" style="font-size: ${(config.font_size || defaultConfig.font_size) * 0.75}px;">Tatib: ${p.status_tatib}</span>
+                            <span class="px-3 py-1 rounded-full text-xs font-bold ${getStatusClass(p.status_wakasek)}" style="font-size: ${(config.font_size || defaultConfig.font_size) * 0.75}px;">Wakasek: ${p.status_wakasek}</span>
+                        </div>
+                    </div>
+                    ${isFullyApproved ? `
+                        <div class="mb-3 p-3 rounded-lg text-center font-bold" style="background-color: ${config.success_color || defaultConfig.success_color}; color: white; font-size: ${(config.font_size || defaultConfig.font_size) * 1.125}px;">
+                            ✓ IZIN DISETUJUI
+                        </div>
+                    ` : ''}
+                    ${isRejected ? `
+                        <div class="mb-3 p-3 rounded-lg text-center font-bold" style="background-color: #ef4444; color: white; font-size: ${(config.font_size || defaultConfig.font_size) * 1.125}px;">
+                            ✗ IZIN DITOLAK
+                        </div>
+                    ` : ''}
+                    <p style="color: ${config.text_color || defaultConfig.text_color}; opacity: 0.8; font-size: ${(config.font_size || defaultConfig.font_size) * 0.875}px;">${p.alasan_izin}</p>
+                    <p class="text-sm mt-2" style="color: ${config.text_color || defaultConfig.text_color}; opacity: 0.6; font-size: ${(config.font_size || defaultConfig.font_size) * 0.875}px;">⏰ ${p.jam_mulai} - ${p.jam_selesai}</p>
+                    ${p.catatan_tatib ? `<p class="text-sm mt-2 italic" style="color: ${config.text_color || defaultConfig.text_color}; font-size: ${(config.font_size || defaultConfig.font_size) * 0.875}px;">💬 Tatib: ${p.catatan_tatib}</p>` : ''}
+                    ${p.catatan_wakasek ? `<p class="text-sm mt-2 italic" style="color: ${config.text_color || defaultConfig.text_color}; font-size: ${(config.font_size || defaultConfig.font_size) * 0.875}px;">💬 Wakasek: ${p.catatan_wakasek}</p>` : ''}
+                    ${isFullyApproved ? `
+                        <button onclick="printPermissionLetter('${p.id}')" class="mt-4 w-full py-2 rounded-lg font-bold btn-primary" style="background-color: ${config.success_color || defaultConfig.success_color}; color: white; font-size: ${(config.font_size || defaultConfig.font_size) * 0.875}px;">🖨️ Cetak Surat Izin</button>
+                    ` : ''}
+                </div>
+                `;
+            }).join('');
+        }
+        
+        function renderTatibDashboard() {
+            const config = window.elementSdk?.config || defaultConfig;
+            const app = document.getElementById('app');
+            const pendingPermissions = allPermissions.filter(p => p.status_tatib === "Menunggu" && p.status_wakasek === "Menunggu");
+            
+            app.innerHTML = `
+                <div class="max-w-6xl mx-auto fade-in">
+                    <div class="flex justify-between items-center mb-8">
+                        <div>
+                            <h1 class="text-3xl font-bold" style="color: ${config.secondary_color || defaultConfig.secondary_color}; font-size: ${(config.font_size || defaultConfig.font_size) * 2}px;">Dashboard Guru Tata Tertib</h1>
+                            <p class="mt-2" style="color: ${config.secondary_color || defaultConfig.secondary_color}; opacity: 0.9; font-size: ${(config.font_size || defaultConfig.font_size) * 1.125}px;">${currentUser.nama} - ${pendingPermissions.length} izin menunggu persetujuan</p>
+                        </div>
+                        <button onclick="logout()" class="px-6 py-3 rounded-lg font-bold" style="background-color: ${config.secondary_color || defaultConfig.secondary_color}; color: ${config.primary_color || defaultConfig.primary_color}; font-size: ${(config.font_size || defaultConfig.font_size)}px;">Keluar</button>
+                    </div>
+                    
+                    <div class="card-shadow rounded-2xl p-8" style="background-color: ${config.secondary_color || defaultConfig.secondary_color};">
+                        <h2 class="text-2xl font-bold mb-6" style="color: ${config.text_color || defaultConfig.text_color}; font-size: ${(config.font_size || defaultConfig.font_size) * 1.5}px;">📋 Izin yang Perlu Diverifikasi</h2>
+                        <div id="pendingPermissions" class="space-y-6"></div>
+                    </div>
+                </div>
+            `;
+            
+            renderPendingPermissions(pendingPermissions, 'tatib');
+        }
+        
+        function renderWakasekDashboard() {
+            const config = window.elementSdk?.config || defaultConfig;
+            const app = document.getElementById('app');
+            const approvedByTatib = allPermissions.filter(p => p.status_tatib === "Disetujui" && (p.status_wakasek === "Menunggu"));
+            
+            app.innerHTML = `
+                <div class="max-w-6xl mx-auto fade-in">
+                    <div class="flex justify-between items-center mb-8">
+                        <div>
+                            <h1 class="text-3xl font-bold" style="color: ${config.secondary_color || defaultConfig.secondary_color}; font-size: ${(config.font_size || defaultConfig.font_size) * 2}px;">Dashboard Wakil Kepala Sekolah</h1>
+                            <p class="mt-2" style="color: ${config.secondary_color || defaultConfig.secondary_color}; opacity: 0.9; font-size: ${(config.font_size || defaultConfig.font_size) * 1.125}px;">${currentUser.nama} - ${approvedByTatib.length} izin menunggu persetujuan akhir</p>
+                        </div>
+                        <button onclick="logout()" class="px-6 py-3 rounded-lg font-bold" style="background-color: ${config.secondary_color || defaultConfig.secondary_color}; color: ${config.primary_color || defaultConfig.primary_color}; font-size: ${(config.font_size || defaultConfig.font_size)}px;">Keluar</button>
+                    </div>
+                    
+                    <div class="card-shadow rounded-2xl p-8" style="background-color: ${config.secondary_color || defaultConfig.secondary_color};">
+                        <h2 class="text-2xl font-bold mb-6" style="color: ${config.text_color || defaultConfig.text_color}; font-size: ${(config.font_size || defaultConfig.font_size) * 1.5}px;">📋 Izin yang Perlu Disetujui</h2>
+                        <div id="pendingPermissions" class="space-y-6"></div>
+                    </div>
+                </div>
+            `;
+            
+            renderPendingPermissions(approvedByTatib, 'wakasek');
+        }
+        
+        function renderPendingPermissions(permissions, role) {
+            const config = window.elementSdk?.config || defaultConfig;
+            const container = document.getElementById('pendingPermissions');
+            
+            if (permissions.length === 0) {
+                container.innerHTML = `<p style="color: ${config.text_color || defaultConfig.text_color}; opacity: 0.6; text-align: center; font-size: ${(config.font_size || defaultConfig.font_size)}px;">Tidak ada izin yang perlu diverifikasi saat ini</p>`;
+                return;
+            }
+            
+            container.innerHTML = permissions.map(p => {
+                const isApproved = (role === 'tatib' && p.status_tatib === 'Disetujui') || (role === 'wakasek' && p.status_wakasek === 'Disetujui');
+                const isRejected = (role === 'tatib' && p.status_tatib === 'Ditolak') || (role === 'wakasek' && p.status_wakasek === 'Ditolak');
+                const showButtons = !isApproved && !isRejected;
+                
+                return `
+                <div class="border-2 rounded-lg p-6" style="border-color: ${config.primary_color || defaultConfig.primary_color}; background-color: #dbeafe;">
+                    <div class="grid md:grid-cols-2 gap-4 mb-4">
+                        <div>
+                            <p class="font-bold text-lg mb-2" style="color: ${config.text_color || defaultConfig.text_color}; font-size: ${(config.font_size || defaultConfig.font_size) * 1.125}px;">👨‍🎓 ${p.nama_siswa}</p>
+                            <p style="color: ${config.text_color || defaultConfig.text_color}; opacity: 0.7; font-size: ${(config.font_size || defaultConfig.font_size)}px;">Kelas: ${p.kelas}</p>
+                        </div>
+                        <div class="text-right">
+                            <p class="font-bold" style="color: ${config.text_color || defaultConfig.text_color}; font-size: ${(config.font_size || defaultConfig.font_size)}px;">📅 ${p.tanggal_izin}</p>
+                            <p style="color: ${config.text_color || defaultConfig.text_color}; opacity: 0.7; font-size: ${(config.font_size || defaultConfig.font_size)}px;">⏰ ${p.jam_mulai} - ${p.jam_selesai}</p>
+                        </div>
+                    </div>
+                    ${isApproved ? `
+                        <div class="mb-4 p-3 rounded-lg text-center font-bold" style="background-color: ${config.success_color || defaultConfig.success_color}; color: white; font-size: ${(config.font_size || defaultConfig.font_size) * 1.125}px;">
+                            ✓ IZIN DISETUJUI
+                        </div>
+                    ` : ''}
+                    ${isRejected ? `
+                        <div class="mb-4 p-3 rounded-lg text-center font-bold" style="background-color: #ef4444; color: white; font-size: ${(config.font_size || defaultConfig.font_size) * 1.125}px;">
+                            ✗ IZIN DITOLAK
+                        </div>
+                    ` : ''}
+                    <div class="mb-4 p-4 rounded-lg" style="background-color: #e0e7ff;">
+                        <p class="font-semibold mb-2" style="color: ${config.text_color || defaultConfig.text_color}; font-size: ${(config.font_size || defaultConfig.font_size)}px;">Alasan Izin:</p>
+                        <p style="color: ${config.text_color || defaultConfig.text_color}; opacity: 0.8; font-size: ${(config.font_size || defaultConfig.font_size)}px;">${p.alasan_izin}</p>
+                    </div>
+                    ${role === 'wakasek' && p.catatan_tatib ? `
+                        <div class="mb-4 p-4 rounded-lg" style="background-color: #d1fae5;">
+                            <p class="font-semibold mb-2" style="color: ${config.text_color || defaultConfig.text_color}; font-size: ${(config.font_size || defaultConfig.font_size)}px;">💬 Catatan dari Guru Tata Tertib:</p>
+                            <p style="color: ${config.text_color || defaultConfig.text_color}; opacity: 0.8; font-size: ${(config.font_size || defaultConfig.font_size)}px;">${p.catatan_tatib}</p>
+                        </div>
+                    ` : ''}
+                    ${(role === 'tatib' && p.catatan_tatib) || (role === 'wakasek' && p.catatan_wakasek) ? `
+                        <div class="mb-4 p-4 rounded-lg" style="background-color: #f3f4f6;">
+                            <p class="font-semibold mb-2" style="color: ${config.text_color || defaultConfig.text_color}; font-size: ${(config.font_size || defaultConfig.font_size)}px;">💬 Catatan Anda:</p>
+                            <p style="color: ${config.text_color || defaultConfig.text_color}; opacity: 0.8; font-size: ${(config.font_size || defaultConfig.font_size)}px;">${role === 'tatib' ? p.catatan_tatib : p.catatan_wakasek}</p>
+                        </div>
+                    ` : ''}
+                    ${showButtons ? `
+                        <div class="mb-4">
+                            <label class="block mb-2 font-semibold" style="color: ${config.text_color || defaultConfig.text_color}; font-size: ${(config.font_size || defaultConfig.font_size)}px;" for="catatan-${p.id}">Catatan (Opsional)</label>
+                            <textarea id="catatan-${p.id}" rows="2" class="w-full px-4 py-3 rounded-lg border-2 focus:outline-none focus:border-purple-500" placeholder="Tambahkan catatan jika diperlukan..." style="font-size: ${(config.font_size || defaultConfig.font_size)}px;"></textarea>
+                        </div>
+                        <div class="flex gap-4">
+                            <button onclick="approvePermission('${p.id}', '${role}')" class="flex-1 py-3 rounded-lg font-bold btn-primary" style="background-color: ${config.success_color || defaultConfig.success_color}; color: ${config.secondary_color || defaultConfig.secondary_color}; font-size: ${(config.font_size || defaultConfig.font_size)}px;">✓ Setujui</button>
+                            <button onclick="rejectPermission('${p.id}', '${role}')" class="flex-1 py-3 rounded-lg font-bold" style="background-color: #ef4444; color: ${config.secondary_color || defaultConfig.secondary_color}; font-size: ${(config.font_size || defaultConfig.font_size)}px;">✗ Tolak</button>
+                        </div>
+                    ` : ''}
+                </div>
+                `;
+            }).join('');
+        }
+        
+        async function approvePermission(id, role) {
+            const permission = allPermissions.find(p => p.id === id);
+            if (!permission) return;
+            
+            const catatan = document.getElementById(`catatan-${id}`).value;
+            
+            if (role === 'tatib') {
+                permission.status_tatib = "Disetujui";
+                permission.catatan_tatib = catatan;
+            } else {
+                permission.status_wakasek = "Disetujui";
+                permission.catatan_wakasek = catatan;
+            }
+            
+            const result = await window.dataSdk.update(permission);
+            
+            if (result.isOk) {
+                showToast('Izin berhasil disetujui!', 'success');
+            } else {
+                showToast('Gagal menyetujui izin. Silakan coba lagi.', 'error');
+            }
+        }
+        
+        async function rejectPermission(id, role) {
+            const permission = allPermissions.find(p => p.id === id);
+            if (!permission) return;
+            
+            const catatan = document.getElementById(`catatan-${id}`).value;
+            
+            if (!catatan) {
+                showToast('Mohon berikan alasan penolakan pada kolom catatan.', 'error');
+                return;
+            }
+            
+            if (role === 'tatib') {
+                permission.status_tatib = "Ditolak";
+                permission.catatan_tatib = catatan;
+            } else {
+                permission.status_wakasek = "Ditolak";
+                permission.catatan_wakasek = catatan;
+            }
+            
+            const result = await window.dataSdk.update(permission);
+            
+            if (result.isOk) {
+                showToast('Izin berhasil ditolak.', 'success');
+            } else {
+                showToast('Gagal menolak izin. Silakan coba lagi.', 'error');
+            }
+        }
+        
+        function renderPublicHistory() {
+            const config = window.elementSdk?.config || defaultConfig;
+            const container = document.getElementById('publicHistory');
+            const recentPermissions = allPermissions.slice(0, 10);
+            
+            if (recentPermissions.length === 0) {
+                container.innerHTML = `<p style="color: ${config.text_color || defaultConfig.text_color}; opacity: 0.6; text-align: center; font-size: ${(config.font_size || defaultConfig.font_size)}px;">Belum ada riwayat izin</p>`;
+                return;
+            }
+            
+            container.innerHTML = `
+                <div class="overflow-x-auto">
+                    <table class="w-full" style="border-collapse: separate; border-spacing: 0;">
+                        <thead>
+                            <tr style="background-color: #e0e7ff;">
+                                <th class="text-left py-4 px-4 font-bold" style="color: ${config.text_color || defaultConfig.text_color}; font-size: ${(config.font_size || defaultConfig.font_size)}px; border-bottom: 3px solid ${config.primary_color || defaultConfig.primary_color};">Nama</th>
+                                <th class="text-left py-4 px-4 font-bold" style="color: ${config.text_color || defaultConfig.text_color}; font-size: ${(config.font_size || defaultConfig.font_size)}px; border-bottom: 3px solid ${config.primary_color || defaultConfig.primary_color};">Kelas</th>
+                                <th class="text-left py-4 px-4 font-bold" style="color: ${config.text_color || defaultConfig.text_color}; font-size: ${(config.font_size || defaultConfig.font_size)}px; border-bottom: 3px solid ${config.primary_color || defaultConfig.primary_color};">Tanggal</th>
+                                <th class="text-left py-4 px-4 font-bold" style="color: ${config.text_color || defaultConfig.text_color}; font-size: ${(config.font_size || defaultConfig.font_size)}px; border-bottom: 3px solid ${config.primary_color || defaultConfig.primary_color};">Alasan</th>
+                                <th class="text-left py-4 px-4 font-bold" style="color: ${config.text_color || defaultConfig.text_color}; font-size: ${(config.font_size || defaultConfig.font_size)}px; border-bottom: 3px solid ${config.primary_color || defaultConfig.primary_color};">Status Tatib</th>
+                                <th class="text-left py-4 px-4 font-bold" style="color: ${config.text_color || defaultConfig.text_color}; font-size: ${(config.font_size || defaultConfig.font_size)}px; border-bottom: 3px solid ${config.primary_color || defaultConfig.primary_color};">Status Wakasek</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${recentPermissions.map((p, index) => `
+                                <tr style="background-color: ${index % 2 === 0 ? '#f9fafb' : '#ffffff'};">
+                                    <td class="py-4 px-4" style="color: ${config.text_color || defaultConfig.text_color}; font-size: ${(config.font_size || defaultConfig.font_size) * 0.875}px; border-bottom: 1px solid #e5e7eb;">${p.nama_siswa}</td>
+                                    <td class="py-4 px-4" style="color: ${config.text_color || defaultConfig.text_color}; font-size: ${(config.font_size || defaultConfig.font_size) * 0.875}px; border-bottom: 1px solid #e5e7eb;">${p.kelas}</td>
+                                    <td class="py-4 px-4" style="color: ${config.text_color || defaultConfig.text_color}; font-size: ${(config.font_size || defaultConfig.font_size) * 0.875}px; border-bottom: 1px solid #e5e7eb;">${p.tanggal_izin}</td>
+                                    <td class="py-4 px-4" style="color: ${config.text_color || defaultConfig.text_color}; font-size: ${(config.font_size || defaultConfig.font_size) * 0.875}px; border-bottom: 1px solid #e5e7eb;">${p.alasan_izin.substring(0, 50)}...</td>
+                                    <td class="py-4 px-4" style="border-bottom: 1px solid #e5e7eb;"><span class="px-3 py-1 rounded-full text-xs font-bold ${getStatusClass(p.status_tatib)}" style="font-size: ${(config.font_size || defaultConfig.font_size) * 0.75}px;">${p.status_tatib}</span></td>
+                                    <td class="py-4 px-4" style="border-bottom: 1px solid #e5e7eb;"><span class="px-3 py-1 rounded-full text-xs font-bold ${getStatusClass(p.status_wakasek)}" style="font-size: ${(config.font_size || defaultConfig.font_size) * 0.75}px;">${p.status_wakasek}</span></td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            `;
+        }
+        
+        function getStatusClass(status) {
+            if (status === "Menunggu") return "status-pending";
+            if (status === "Disetujui") return "status-approved";
+            if (status === "Ditolak") return "status-rejected";
+            return "";
+        }
+        
+        function logout() {
+            currentUser = null;
+            renderLoginPage();
+            showToast('Berhasil keluar dari sistem', 'success');
+        }
+        
+        function printPermissionLetter(id) {
+            const permission = allPermissions.find(p => p.id === id);
+            if (!permission) return;
+            
+            const config = window.elementSdk?.config || defaultConfig;
+            
+            const printWindow = window.open('', '_blank');
+            printWindow.document.write(`
+                <!DOCTYPE html>
+                <html lang="id">
+                <head>
+                    <meta charset="UTF-8">
+                    <title>Surat Izin - ${permission.nama_siswa}</title>
+                    <style>
+                        @media print {
+                            @page { margin: 2cm; }
+                        }
+                        body {
+                            font-family: 'Times New Roman', Times, serif;
+                            line-height: 1.6;
+                            color: #000;
+                            max-width: 21cm;
+                            margin: 0 auto;
+                            padding: 20px;
+                        }
+                        .header {
+                            text-align: center;
+                            border-bottom: 3px solid #000;
+                            padding-bottom: 15px;
+                            margin-bottom: 30px;
+                        }
+                        .logo-section {
+                            display: flex;
+                            align-items: center;
+                            justify-content: center;
+                            margin-bottom: 10px;
+                        }
+                        .school-name {
+                            font-size: 24px;
+                            font-weight: bold;
+                            margin: 5px 0;
+                            text-transform: uppercase;
+                        }
+                        .school-info {
+                            font-size: 12px;
+                            margin: 3px 0;
+                        }
+                        .title {
+                            text-align: center;
+                            font-size: 18px;
+                            font-weight: bold;
+                            text-decoration: underline;
+                            margin: 30px 0 20px 0;
+                        }
+                        .content {
+                            margin: 20px 0;
+                            text-align: justify;
+                        }
+                        .details {
+                            margin: 20px 0 20px 40px;
+                        }
+                        .details-row {
+                            display: flex;
+                            margin: 8px 0;
+                        }
+                        .details-label {
+                            width: 150px;
+                            font-weight: normal;
+                        }
+                        .details-colon {
+                            width: 20px;
+                        }
+                        .details-value {
+                            flex: 1;
+                        }
+                        .footer {
+                            margin-top: 50px;
+                            text-align: right;
+                        }
+                        .date {
+                            margin-bottom: 80px;
+                        }
+                        .approval-section {
+                            margin-top: 40px;
+                            display: flex;
+                            justify-content: space-between;
+                        }
+                        .approval-box {
+                            text-align: center;
+                            width: 45%;
+                        }
+                        .no-print {
+                            text-align: center;
+                            margin: 20px 0;
+                        }
+                        @media print {
+                            .no-print { display: none; }
+                        }
+                    </style>
+                </head>
+                <body>
+                    <div class="header">
+                        <div class="logo-section">
+                            <div>
+                                <div class="school-name">${config.school_name || defaultConfig.school_name}</div>
+                                <div class="school-info">${config.school_address || defaultConfig.school_address}</div>
+                                <div class="school-info">Telepon: ${config.school_phone || defaultConfig.school_phone}</div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="title">SURAT IZIN TIDAK MASUK SEKOLAH</div>
+                    
+                    <div class="content">
+                        <p>Yang bertanda tangan di bawah ini, menerangkan bahwa:</p>
+                    </div>
+                    
+                    <div class="details">
+                        <div class="details-row">
+                            <div class="details-label">Nama</div>
+                            <div class="details-colon">:</div>
+                            <div class="details-value">${permission.nama_siswa}</div>
+                        </div>
+                        <div class="details-row">
+                            <div class="details-label">Kelas</div>
+                            <div class="details-colon">:</div>
+                            <div class="details-value">${permission.kelas}</div>
+                        </div>
+                        <div class="details-row">
+                            <div class="details-label">Tanggal</div>
+                            <div class="details-colon">:</div>
+                            <div class="details-value">${formatDate(permission.tanggal_izin)}</div>
+                        </div>
+                        <div class="details-row">
+                            <div class="details-label">Waktu</div>
+                            <div class="details-colon">:</div>
+                            <div class="details-value">${permission.jam_mulai} - ${permission.jam_selesai} WIB</div>
+                        </div>
+                        <div class="details-row">
+                            <div class="details-label">Keperluan</div>
+                            <div class="details-colon">:</div>
+                            <div class="details-value">${permission.alasan_izin}</div>
+                        </div>
+                    </div>
+                    
+                    <div class="content">
+                        <p>Dengan hormat memohon izin untuk tidak mengikuti kegiatan belajar mengajar pada waktu tersebut di atas.</p>
+                        <p>Demikian surat izin ini dibuat dengan sebenarnya untuk dapat dipergunakan sebagaimana mestinya.</p>
+                    </div>
+                    
+                    <div class="approval-section">
+                        <div class="approval-box">
+                            <p><strong>Disetujui oleh:</strong></p>
+                            <p style="margin-top: 10px;"><strong>Guru Tata Tertib</strong></p>
+                            ${permission.catatan_tatib ? `<p style="font-size: 12px; font-style: italic; margin-top: 10px;">Catatan: ${permission.catatan_tatib}</p>` : ''}
+                        </div>
+                        <div class="approval-box">
+                            <p><strong>Disetujui oleh:</strong></p>
+                            <p style="margin-top: 10px;"><strong>Wakil Kepala Sekolah</strong></p>
+                            ${permission.catatan_wakasek ? `<p style="font-size: 12px; font-style: italic; margin-top: 10px;">Catatan: ${permission.catatan_wakasek}</p>` : ''}
+                        </div>
+                    </div>
+                    
+                    <div class="no-print">
+                        <button onclick="window.print()" style="padding: 10px 30px; background-color: #667eea; color: white; border: none; border-radius: 8px; font-size: 16px; cursor: pointer; margin: 10px;">🖨️ Cetak</button>
+                        <button onclick="window.close()" style="padding: 10px 30px; background-color: #6b7280; color: white; border: none; border-radius: 8px; font-size: 16px; cursor: pointer; margin: 10px;">Tutup</button>
+                    </div>
+                </body>
+                </html>
+            `);
+            printWindow.document.close();
+        }
+        
+        function formatDate(dateString) {
+            const months = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
+            const date = new Date(dateString);
+            return `${date.getDate()} ${months[date.getMonth()]} ${date.getFullYear()}`;
+        }
+        
+        function showToast(message, type) {
+            const config = window.elementSdk?.config || defaultConfig;
+            const toast = document.createElement('div');
+            toast.className = 'fixed top-4 right-4 px-6 py-4 rounded-lg font-bold shadow-lg fade-in z-50';
+            toast.style.backgroundColor = type === 'success' ? (config.success_color || defaultConfig.success_color) : '#ef4444';
+            toast.style.color = config.secondary_color || defaultConfig.secondary_color;
+            toast.style.fontSize = `${(config.font_size || defaultConfig.font_size)}px`;
+            toast.textContent = message;
+            
+            document.body.appendChild(toast);
+            
+            setTimeout(() => {
+                toast.style.opacity = '0';
+                setTimeout(() => toast.remove(), 300);
+            }, 3000);
+        }
+        
+        initApp();
+    </script>
+ <script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'9a1b35bf82c4b5cf',t:'MTc2MzY3NTkxOS4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+</html>

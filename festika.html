@@ -79,9 +79,60 @@
         const dataHandler = {
             onDataChanged(data) {
                 allPermissions = data.sort((a, b) => b.timestamp - a.timestamp);
-                renderCurrentView();
+                
+                // Update only specific sections without full page refresh
+                if (currentUser) {
+                    if (currentUser.role === 'siswa') {
+                        updateStudentPermissions();
+                    } else if (currentUser.role === 'tatib') {
+                        updateTatibPermissions();
+                    } else if (currentUser.role === 'wakasek') {
+                        updateWakasekPermissions();
+                    }
+                } else {
+                    updatePublicHistory();
+                }
             }
         };
+        
+        function updateStudentPermissions() {
+            const myPermissions = allPermissions.filter(p => p.nama_siswa === currentUser.nama && p.kelas === currentUser.kelas);
+            const container = document.getElementById('myPermissions');
+            if (container) {
+                renderMyPermissions(myPermissions);
+            }
+        }
+        
+        function updateTatibPermissions() {
+            const pendingPermissions = allPermissions.filter(p => p.status_tatib === "Menunggu" && p.status_wakasek === "Menunggu");
+            const container = document.getElementById('pendingPermissions');
+            const countElement = document.querySelector('.dashboard-count');
+            if (container) {
+                renderPendingPermissions(pendingPermissions, 'tatib');
+            }
+            if (countElement) {
+                countElement.textContent = `${currentUser.nama} - ${pendingPermissions.length} izin menunggu persetujuan`;
+            }
+        }
+        
+        function updateWakasekPermissions() {
+            const approvedByTatib = allPermissions.filter(p => p.status_tatib === "Disetujui" && (p.status_wakasek === "Menunggu"));
+            const container = document.getElementById('pendingPermissions');
+            const countElement = document.querySelector('.dashboard-count');
+            if (container) {
+                renderPendingPermissions(approvedByTatib, 'wakasek');
+            }
+            if (countElement) {
+                countElement.textContent = `${currentUser.nama} - ${approvedByTatib.length} izin menunggu persetujuan akhir`;
+            }
+        }
+        
+        function updatePublicHistory() {
+            const container = document.getElementById('publicHistory');
+            if (container) {
+                renderPublicHistory();
+            }
+        }
         
         async function initApp() {
             const initResult = await window.dataSdk.init(dataHandler);
@@ -551,7 +602,7 @@
                     <div class="flex justify-between items-center mb-8">
                         <div>
                             <h1 class="text-3xl font-bold" style="color: ${config.secondary_color || defaultConfig.secondary_color}; font-size: ${(config.font_size || defaultConfig.font_size) * 2}px;">Dashboard Guru Tata Tertib</h1>
-                            <p class="mt-2" style="color: ${config.secondary_color || defaultConfig.secondary_color}; opacity: 0.9; font-size: ${(config.font_size || defaultConfig.font_size) * 1.125}px;">${currentUser.nama} - ${pendingPermissions.length} izin menunggu persetujuan</p>
+                            <p class="mt-2 dashboard-count" style="color: ${config.secondary_color || defaultConfig.secondary_color}; opacity: 0.9; font-size: ${(config.font_size || defaultConfig.font_size) * 1.125}px;">${currentUser.nama} - ${pendingPermissions.length} izin menunggu persetujuan</p>
                         </div>
                         <button onclick="logout()" class="px-6 py-3 rounded-lg font-bold" style="background-color: ${config.secondary_color || defaultConfig.secondary_color}; color: ${config.primary_color || defaultConfig.primary_color}; font-size: ${(config.font_size || defaultConfig.font_size)}px;">Keluar</button>
                     </div>
@@ -576,7 +627,7 @@
                     <div class="flex justify-between items-center mb-8">
                         <div>
                             <h1 class="text-3xl font-bold" style="color: ${config.secondary_color || defaultConfig.secondary_color}; font-size: ${(config.font_size || defaultConfig.font_size) * 2}px;">Dashboard Wakil Kepala Sekolah</h1>
-                            <p class="mt-2" style="color: ${config.secondary_color || defaultConfig.secondary_color}; opacity: 0.9; font-size: ${(config.font_size || defaultConfig.font_size) * 1.125}px;">${currentUser.nama} - ${approvedByTatib.length} izin menunggu persetujuan akhir</p>
+                            <p class="mt-2 dashboard-count" style="color: ${config.secondary_color || defaultConfig.secondary_color}; opacity: 0.9; font-size: ${(config.font_size || defaultConfig.font_size) * 1.125}px;">${currentUser.nama} - ${approvedByTatib.length} izin menunggu persetujuan akhir</p>
                         </div>
                         <button onclick="logout()" class="px-6 py-3 rounded-lg font-bold" style="background-color: ${config.secondary_color || defaultConfig.secondary_color}; color: ${config.primary_color || defaultConfig.primary_color}; font-size: ${(config.font_size || defaultConfig.font_size)}px;">Keluar</button>
                     </div>
@@ -960,5 +1011,5 @@
         
         initApp();
     </script>
- <script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'9a1b35bf82c4b5cf',t:'MTc2MzY3NTkxOS4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+ <script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'9a1ffccbe66de77c',t:'MTc2MzcyNjAxNS4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>
